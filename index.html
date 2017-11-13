@@ -1,0 +1,236 @@
+<html>
+	<head>
+		<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+		<script type="text/javascript">
+            
+            window.addEventListener('load', init);
+		
+			var socket = io.connect('http://srs815.itp.io:8000/');
+            
+            var dataUrl;
+            var data;
+            var newImage;
+            var newDiv;
+            var newImgWrap;
+            
+            // We'll use a global variable to hold on to our id from PeerJS
+	       var peer_id = null;
+	       var peer = null;
+            
+            /* Get User Media */
+	        var my_stream = null;
+            var newRTC;
+            var videoElement;
+            var ovideoElement;
+            var blob;
+            var file;
+            var mediaConstraints = {video: true, audio: true};
+            
+             /* Get User Media */
+            window.URL = window.URL || window.webkitURL || window.mozURL || window.msURL;
+            navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+            /* Get User Media */
+            if (navigator.getUserMedia){
+                navigator.getUserMedia({video: true, audio: true}, function(stream) {
+
+                        my_stream = stream;
+                        videoElement = document.getElementById('myvideo');
+                        videoElement.src = window.URL.createObjectURL(stream) || stream;
+                        videoElement.play();
+
+                        connectPeer();
+
+                    }, function(err) {
+                        console.log('Failed to get local stream' ,err);
+                });
+            }
+            
+            // Connect the socket
+			socket.on('connect', function() {
+				console.log("Connected");
+			});
+
+			// Receive from any other mouse event
+			socket.on('othermouse', function (data) {
+				odraw(data.x,data.y);
+			});
+            
+            // Receive someone else's canvas
+             socket.on('clearImage', function () {
+                console.log("clear ready");
+                clearImage(false);
+                     
+            });
+			
+            // Send the mouse
+			var sendmouse = function(xval, yval) {
+				
+				socket.emit('othermouse',{ x: xval, y: yval });
+			};
+            
+            // Send the clear
+            var clearImage = function(iClicked){
+                
+                // Clear the drawing
+                    context.fillStyle= background;
+                    context.fillRect(0,0,canvas.width,canvas.height);
+                
+                if(iClicked){
+                    socket.emit('cleared', '');
+                }
+            };
+            
+
+			///////////////
+			
+			var canvas;
+			var context;
+            var canvasRect;
+            var currentlyDrawing = false;
+            var px = 0;
+			var py = 0;
+            var background = '#FFFEE7';
+            var strokeColor = '#222';
+
+			function init(){
+				canvas = document.getElementById('mycanvas');
+				context = canvas.getContext('2d');
+			
+				context.fillStyle= background;
+				context.fillRect(0,0,canvas.width,canvas.height);	
+				
+                // Detect if mouse is moving
+				canvas.addEventListener('mousemove', function(evt) {
+					
+					//evt.clientX is x but in the entire window, not the canvas
+					//evt.clientY is y
+		
+					// Get the canvas bounding rect
+					canvasRect = canvas.getBoundingClientRect(); 
+
+					// Now calculate the mouse position values
+					y = evt.clientY - canvasRect.top; // minus the starting point of the canvas rect
+					x = evt.clientX - canvasRect.left;  // minus the starting point of the canvas rect on the x axis
+                    
+				    if(currentlyDrawing){
+                        
+                        draw(x,y);
+                        sendmouse(x,y);
+                        
+                    }
+                    
+                    document.getElementById('clear').onclick = function(){
+                        
+                        // Send the image to the other person on button click
+                        clearImage(true);
+                    
+                    };
+                                       
+				}, false);	
+                
+                // Detect if the left mouse button is pressed
+                canvas.onmousedown = function(evt) { 
+                    // I'm drawing
+                    currentlyDrawing = true;
+                    // Begin drawing where mouse is
+                    canvasRect = canvas.getBoundingClientRect(); 
+                    y = evt.clientY - canvasRect.top; // minus the starting point of the canvas rect
+					x = evt.clientX - canvasRect.left;  // minus the starting point of the canvas rect on the x axis
+                    px = x;
+                    py = y;
+                };
+
+                canvas.onmouseup = function() {
+                    // I stopped drawing
+                    currentlyDrawing = false;
+
+                };
+                
+			} // Close init
+	
+			var draw = function(xval,yval) {
+				
+				//console.log("draw " + xval + " " + yval);
+				
+				context.beginPath();
+	
+				// This is silly but it's what we have to do to get a random hex string
+				context.strokeStyle= strokeColor;
+	
+				context.moveTo(px,py);
+				context.lineTo(xval,yval);
+
+				context.stroke();
+				
+				px = xval;
+				py = yval;
+			};
+
+			var opx = 0;
+			var opy = 0;
+	
+			var odraw = function(xval,yval) {
+				
+				//console.log("draw " + xval + " " + yval);
+				
+				context.beginPath();
+	
+				context.strokeStyle= strokeColor;
+	
+				context.moveTo(opx,opy);
+				context.lineTo(xval,yval);
+
+				context.stroke();
+				
+				opx = xval;
+				opy = yval;
+			};
+	
+		</script>	
+	</head>
+    <style type="text/css">
+        #thumbnails img{
+            width: 100px;
+            position: relative;
+            display: inline-block;
+            margin-top:10px;
+            margin-right: 10px;
+        }
+        #clear{
+            position: relative;
+            display: block;
+            padding: 10px 30px;
+            border: none;
+            background-color:#ADFF2F;
+            color: dimgrey;
+            outline: 0;
+            transition: 0s;
+            width: 250px;
+            font-size: 1em;
+            
+        }
+        #clear:hover{
+            transition: 0.6s;
+            background-color: #EDFF73;
+            cursor: pointer;
+        }
+        body{
+            background-color: #D6D3B7;
+        }
+        canvas{
+            float: left;
+        }
+        #buttons {
+	       float:left;
+           width:250px;
+           margin-left: 20px;
+        }
+    </style>
+	<body>
+        <canvas width="600" height="300" id="mycanvas" ></canvas>
+        <div id="buttons">
+            <button id="clear">Clear</button>
+        </div>
+	</body>
+</html>
